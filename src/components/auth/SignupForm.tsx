@@ -41,8 +41,9 @@ const SignupForm: React.FC = () => {
     try {
       await signup(name, email, password);
       navigate('/');
-    } catch (err) {
-      setError('Failed to create an account. Please try again.');
+    } catch (err: any) {
+      // Display the user-friendly error message
+      setError(err.message || 'Failed to create an account. Please try again.');
     } finally {
       setIsLoading(false);
     }

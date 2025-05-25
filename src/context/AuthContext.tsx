@@ -50,6 +50,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .single();
 
       if (error) {
+        // Handle case where no profile is found
+        if (error.code === 'PGRST116') {
+          setUser(null);
+          return;
+        }
         console.error('Error fetching user profile:', error);
         return;
       }
@@ -57,6 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(profile);
     } catch (error) {
       console.error('Error fetching user profile:', error);
+      setUser(null);
     }
   };
 
@@ -111,7 +117,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         password,
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        // Check for user already exists error
+        if (authError.message === 'User already registered') {
+          throw new Error('This email is already registered. Please try logging in instead.');
+        }
+        throw authError;
+      }
 
       if (authData.user) {
         const { error: profileError } = await supabase
