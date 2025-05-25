@@ -10,6 +10,12 @@ import SignupPage from '../pages/public/SignupPage';
 
 // Student pages
 import StudentDashboard from '../pages/student/DashboardPage';
+import MyLearningPage from '../pages/student/MyLearningPage';
+import WishlistPage from '../pages/student/WishlistPage';
+import ProfilePage from '../pages/student/ProfilePage';
+
+// Admin pages
+import AdminDashboard from '../pages/admin/DashboardPage';
 
 // Define protected route components
 const ProtectedRoute: React.FC<{
@@ -50,6 +56,28 @@ const Router: React.FC = () => {
         <Route
           path="/dashboard"
           element={<ProtectedRoute element={<StudentDashboard />} requiredRole="student" />}
+        />
+        <Route
+          path="/my-learning"
+          element={<ProtectedRoute element={<MyLearningPage />} requiredRole="student" />}
+        />
+        <Route
+          path="/wishlist"
+          element={<ProtectedRoute element={<WishlistPage />} requiredRole="student" />}
+        />
+        <Route
+          path="/profile"
+          element={<ProtectedRoute element={<ProfilePage />} />}
+        />
+
+        {/* Admin routes */}
+        <Route
+          path="/admin"
+          element={<ProtectedRoute element={<AdminDashboard />} requiredRole="admin" />}
+        />
+        <Route
+          path="/admin/dashboard"
+          element={<ProtectedRoute element={<AdminDashboard />} requiredRole="admin" />}
         />
 
         {/* Catch-all redirect */}
