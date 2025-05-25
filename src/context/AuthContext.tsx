@@ -41,7 +41,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const fetchUserProfile = async (userId: string) => {
+  const fetchUserProfile = async (userId: string, retryCount = 0) => {
     try {
       const { data: profile, error } = await supabase
         .from('users')
@@ -50,12 +50,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .single();
 
       if (error) {
-        // Handle case where no profile is found
-        if (error.code === 'PGRST116') {
-          setUser(null);
-          return;
+        if (error.code === 'PGRST116' && retryCount < 3) {
+          // Profile not found, retry after a delay
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return fetchUserProfile(userId, retryCount + 1);
         }
         console.error('Error fetching user profile:', error);
+        setUser(null);
         return;
       }
 
@@ -112,35 +113,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signup = async (name: string, email: string, password: string) => {
     setIsLoading(true);
     try {
+      // First try to sign up with Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
       });
 
       if (authError) {
-        // Check for user already exists error
         if (authError.message === 'User already registered') {
           throw new Error('This email is already registered. Please try logging in instead.');
         }
         throw authError;
       }
 
-      if (authData.user) {
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert([
-            {
-              id: authData.user.id,
-              name,
-              email,
-              role: 'student'
-            }
-          ]);
-
-        if (profileError) throw profileError;
-
-        await fetchUserProfile(authData.user.id);
+      if (!authData.user) {
+        throw new Error('Failed to create user account');
       }
+
+      // Create the user profile in our users table
+      const { error: profileError } = await supabase
+        .from('users')
+        .insert([
+          {
+            id: authData.user.id,
+            name,
+            email,
+            role: 'student'
+          }
+        ]);
+
+      if (profileError) {
+        // If profile creation fails, we should clean up the auth user
+        await supabase.auth.signOut();
+        throw profileError;
+      }
+
+      // Fetch the newly created profile
+      await fetchUserProfile(authData.user.id);
     } catch (error) {
       console.error('Signup failed:', error);
       throw error;
