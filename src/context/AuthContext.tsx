@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, Student, Admin } from '../types';
-import { supabase, hashPassword } from '../utils/supabase';
+import { User } from '../types';
+import { supabase } from '../utils/supabase';
 
 interface AuthContextType {
   user: User | null;
@@ -27,35 +27,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     checkUser();
-  }, []);
-
-  const checkUser = async () => {
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      if (session?.session?.user?.id) {
-        const { data: userData, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.session.user.id)
-          .single();
-
-        if (error) {
-          console.error('Error fetching user data:', error);
-          setUser(null);
-          return;
-        }
-
-        if (userData) {
-          setUser(userData as User);
-        } else {
-          setUser(null);
-        }
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        fetchUserProfile(session.user.id);
       } else {
         setUser(null);
       }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user profile:', error);
+        return;
+      }
+
+      setUser(profile);
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+    }
+  };
+
+  const checkUser = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        await fetchUserProfile(session.user.id);
+      }
     } catch (error) {
       console.error('Error checking user session:', error);
-      setUser(null);
     } finally {
       setIsLoading(false);
     }
@@ -64,19 +76,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      const hashedPassword = await hashPassword(password);
-      const { data: user, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .eq('password_hash', hashedPassword)
-        .single();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-      if (error || !user) {
-        throw new Error('Invalid credentials');
+      if (error) throw error;
+
+      if (data.user) {
+        await fetchUserProfile(data.user.id);
       }
-
-      setUser(user as User);
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
@@ -97,26 +106,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signup = async (name: string, email: string, password: string) => {
     setIsLoading(true);
     try {
-      const hashedPassword = await hashPassword(password);
-      
-      const { data: newUser, error } = await supabase
-        .from('users')
-        .insert([
-          {
-            name,
-            email,
-            password_hash: hashedPassword,
-            role: 'student'
-          }
-        ])
-        .select()
-        .single();
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
 
-      if (error) {
-        throw error;
+      if (authError) throw authError;
+
+      if (authData.user) {
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert([
+            {
+              id: authData.user.id,
+              name,
+              email,
+              role: 'student'
+            }
+          ]);
+
+        if (profileError) throw profileError;
+
+        await fetchUserProfile(authData.user.id);
       }
-
-      setUser(newUser as User);
     } catch (error) {
       console.error('Signup failed:', error);
       throw error;
